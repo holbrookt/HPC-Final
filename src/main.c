@@ -4,9 +4,9 @@
 #include <string.h>
 
 //heat_scale dataset is 270x13
-//double solutions[270];
-double weights[13] = { 0 };
+//double weights[13] = { 0 };
 
+#define SIZEOF(x) (sizeof(x) / sizeof((x)[0]))
 
 double sigmoid(double x) {
     double e = 2.718281828;
@@ -75,7 +75,7 @@ double predict( double * row, double * weights) {
     return sigmoid(sol);
 }
 
-void logisticRegression(double **data, double *solutions) {
+void logisticRegression(double **data, double *weights, double *solutions) {
 
     // t
     double epsilon = 0.000001;
@@ -99,7 +99,7 @@ void logisticRegression(double **data, double *solutions) {
             if (j == 268) {
                 printf("[%d] Error: %f Weight diff: %f\n", j, error, weights[0] - prev_weights[0]);
             }
-            for (i=1; i < 13; i++) {
+            for (i=1; i < SIZEOF(weights); i++) {
                 weights[i] = prev_weights[i] + gamma * error * sol * (1 - sol) * data[j][i];
             }
         }
@@ -107,7 +107,7 @@ void logisticRegression(double **data, double *solutions) {
         if ( dist < epsilon) {
             break;
         }
-        for (i = 0; i < 13; i++) {
+        for (i = 0; i < SIZEOF(weights); i++) {
             prev_weights[i] = weights[i];
         }
         printf("Iteration %d: distance = %f\n", iter++, dist);
@@ -119,7 +119,7 @@ void logisticRegression(double **data, double *solutions) {
     printf("\n");
 }
 
-int test(double ** data, double *solutions) {
+int test(double ** data, double *weights, double *solutions) {
     int i, j;
     int total = 0;
     int correct = 0;
@@ -145,7 +145,8 @@ int main(int argc, char* argv[]) {
     double number_of_entries = atoi(argv[2]);
     double number_of_features = atoi(argv[3]);
     double **data = malloc( number_of_entries * sizeof(double *));
-    double * solutions = malloc( number_of_entries * sizeof(double));
+    double *solutions = malloc( number_of_entries * sizeof(double));
+    double *weights = calloc((number_of_features+1), sizeof(double));
     int i =0;
     for (i = 0; i < number_of_entries; i++) {
         data[i] = malloc(number_of_features * sizeof(double));
@@ -153,8 +154,8 @@ int main(int argc, char* argv[]) {
     printf("Reading File\n");
     readfile(argv[1], data, solutions, number_of_features); 
     printf("Running Logistic Regresion\n");
-    logisticRegression(data, solutions);
-    test(data, solutions);
+    logisticRegression(data, solutions, weights);
+    test(data, weights, solutions);
     printf("Done\n");
     return 0;
 }
