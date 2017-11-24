@@ -6,6 +6,7 @@ double sigmoid(double x) {
     return 1.0 / (1.0 + pow(e, -x));
 }
 
+// Calculates the distance between two weights
 double normalize(Weights_t left, Weights_t right) {
     double sum = 0;
     int i;
