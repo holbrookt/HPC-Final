@@ -59,6 +59,8 @@ void logisticRegression(double **data, Weights_t weights, double *solutions, int
         printf("Iteration %d: distance = %f\n", iter++, dist);
         print_weights(weights);
     }
+    free(prev_weights->values);
+    free(prev_weights);
 }
 
 // Test the quality of the predictor against training data
@@ -107,5 +109,12 @@ int main(int argc, char* argv[]) {
     printf("Testing quality of predictor\n");
     test(data, weights, solutions, number_of_features, number_of_entries);
     
+    for (i = 0; i < number_of_entries; i++) {
+        free(data[i]);
+    }
+    free(data);
+    free(solutions);
+    free(weights->values);
+    free(weights);
     return 0;
 }

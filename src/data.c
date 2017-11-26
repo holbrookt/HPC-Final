@@ -50,6 +50,8 @@ void readfile(char* filename, double ** data, double *solutions, int number_of_f
             printf("   Solution: %f\n", solutions[example_number]);
         }
         example_number++;
+        free(line_tokens);
     }
+    fclose(fp);
     printf("number_of_entries: %d\n", example_number);
 }
