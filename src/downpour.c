@@ -37,7 +37,6 @@ void logisticRegression(double *data, Weights_t weights, double *solutions, int 
     int i, j, k;
     while (iter < max_iters) {
         double error;
-        printf("number_of_entires: %d \n", number_of_entries);
         for (j=0; j < number_of_entries; j++) {
             // Get p(x) per item 1 ^
             double sol = predict(data, j*prev_weights->length, prev_weights);
@@ -45,13 +44,20 @@ void logisticRegression(double *data, Weights_t weights, double *solutions, int 
             error = solutions[j] - sol;
             //printf("[%d] predicted:  %f actual %f\n", task, sol, solutions[j]);
             // Add bias gradient per item 4 ^
-            if (task == 0) {
+            /*if (task == 0) {
                 weights->values[0] += gamma * error * sol * (1- sol);
             } else {
                 weights->values[task] += (gamma * error * sol * (1 - sol) * data[j + i-1]);
+            }*/
+       
+            weights->values[0] += gamma * error * sol * (1- sol);
+            // Add gradient to eache element per item 3 ^
+            for (i=1; i < weights->length; i++) {
+                weights->values[i] += (gamma * error * sol * (1 - sol) * data[j + i-1]);
             }
+            
         }
-        print_weights(weights);
+        // print_weights(weights);
         // normalize the ditance between the weights to see % change
         double dist = normalize(weights, prev_weights);
         //printf("Dist: %f\n", dist);
@@ -65,7 +71,7 @@ void logisticRegression(double *data, Weights_t weights, double *solutions, int 
             // printf("%.3f  ", weights[i]);
         }
         printf("Iteration %d: distance = %f\n", iter++, dist);
-        print_weights(weights);
+        //print_weights_ranked(weights, task);
     }
     free(prev_weights->values);
     free(prev_weights);
@@ -127,6 +133,7 @@ int main(int argc, char* argv[]) {
     weights->length = number_of_features+1;
     weights->values = (double*)malloc((number_of_features+1)* sizeof(double));
     double *collectedWeights = NULL;
+    double *prev_weights = NULL;
     int i =0;
 
     if (rank == 0) {
@@ -138,42 +145,54 @@ int main(int argc, char* argv[]) {
         readfile(argv[1], data, solutions, number_of_features); 
         convert_2d_to_1d(data, data_1d, number_of_entries, number_of_features);
         collectedWeights = malloc(numtasks*weights->length* sizeof(double)); 
-        //double *collectedWeights = malloc(16* sizeof(double)); 
+        prev_weights = malloc(weights->length * sizeof(double));
+        for (i = 0; i < weights->length; i++) {
+            prev_weights[i] = 0;
+        }
     }
 
     double *localSolutions = malloc( (sendcount/3) * sizeof(double));
-    for (i = 0; i < (sendcount/3); i++) {
+    /*for (i = 0; i < (sendcount/3); i++) {
         localSolutions[i] = solutions[i+(rank*(sendcount/3))];
-    }
+    }*/
 
     double start = MPI_Wtime();
-    int j;
-    for (j = 0; j <11; j++) {
-
+    int j, k;
     MPI_Barrier(MPI_COMM_WORLD);
-    MPI_Scatter(data_1d, sendcount, MPI_DOUBLE, recvbuf, sendcount, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    for ( i = 0; i < sendcount; i++) {
-        //printf("[%d] %d: %f\n", rank, i, recvbuf[i]);
-    }
-    printf("[%d] Running Logistic Regresion\n", rank);
-    logisticRegression(recvbuf, weights, localSolutions, sendcount/3, batch_size, rank);
-    MPI_Barrier(MPI_COMM_WORLD);
-    printf("MPI Gather \n");
-    MPI_Gather(weights->values, weights->length, MPI_DOUBLE, collectedWeights, weights->length, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    printf("[%d] Done Gather \n", rank);
-    if (rank == 0) {
-        printf("Combining weights\n");
-        for (i = 0; i < (weights->length); i++) {
-            weights->values[i] = collectedWeights[i+(i*weights->length)];
+    //MPI_Bcast(weights->values, weights->length, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    for (j = 0; j <100/batch_size; j++) {
+        MPI_Barrier(MPI_COMM_WORLD);
+        MPI_Bcast(weights->values, weights->length, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Barrier(MPI_COMM_WORLD);
+        MPI_Scatter(data_1d, sendcount, MPI_DOUBLE, recvbuf, sendcount, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Scatter(solutions, sendcount/3, MPI_DOUBLE, localSolutions, sendcount/3, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        //printf("[%d] Running Logistic Regresion\n", rank);
+        logisticRegression(recvbuf, weights, localSolutions, sendcount/3, batch_size, rank);
+        //logisticRegression(data_1d, weights, solutions, number_of_entries, batch_size, rank);
+        MPI_Barrier(MPI_COMM_WORLD);
+        MPI_Gather(weights->values, weights->length, MPI_DOUBLE, collectedWeights, weights->length, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        if (rank == 0) {
+            printf("Combining weights\n");
+            for (i = 0; i < (weights->length); i++) {
+                double gradient = 0;
+                 for (k = 0; k < numtasks; k++) {
+                    gradient += collectedWeights[(k*weights->length)+i] - prev_weights[i];
+                    printf("[W%d] Gradient %f += %f - prev_weight: %f\n",i, gradient,collectedWeights[(k*weights->length)+i], prev_weights[i]);
+                 }
+                 weights->values[i] = prev_weights[i] + gradient;
+                 //collectedWeights[i+(i*weights->length)];
+            }
+            for (i = 0; i < weights->length; i++) {
+                prev_weights[i] = weights->values[i];
+            }
+            print_weights_ranked(weights, rank);
         }
-        print_weights(weights);
-    }
     }
     double end = MPI_Wtime();
     double total_time = end-start;
 
-    printf("Took %f\n", total_time);
     if (rank == 0) {
+        printf("Took %f\n", total_time);
         // Gather and test solution.
         printf("Testing quality of predictor\n");
         test(data_1d, weights, solutions, number_of_features, number_of_entries);
