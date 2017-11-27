@@ -137,36 +137,46 @@ int main(int argc, char* argv[]) {
         printf("Reading File\n");
         readfile(argv[1], data, solutions, number_of_features); 
         convert_2d_to_1d(data, data_1d, number_of_entries, number_of_features);
-        //double *collectedWeights = malloc(numtasks*weights->length* sizeof(double)); 
-        double *collectedWeights = malloc(16* sizeof(double)); 
+        collectedWeights = malloc(numtasks*weights->length* sizeof(double)); 
+        //double *collectedWeights = malloc(16* sizeof(double)); 
     }
- 
-    MPI_Barrier(MPI_COMM_WORLD);
+
     double *localSolutions = malloc( (sendcount/3) * sizeof(double));
     for (i = 0; i < (sendcount/3); i++) {
         localSolutions[i] = solutions[i+(rank*(sendcount/3))];
     }
+
+    double start = MPI_Wtime();
+    int j;
+    for (j = 0; j <11; j++) {
+
+    MPI_Barrier(MPI_COMM_WORLD);
     MPI_Scatter(data_1d, sendcount, MPI_DOUBLE, recvbuf, sendcount, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     for ( i = 0; i < sendcount; i++) {
         //printf("[%d] %d: %f\n", rank, i, recvbuf[i]);
     }
-    printf("[%d] Got data: %f %f %f %f\n", rank, recvbuf[0], recvbuf[1], recvbuf[2], recvbuf[3]);
     printf("[%d] Running Logistic Regresion\n", rank);
     logisticRegression(recvbuf, weights, localSolutions, sendcount/3, batch_size, rank);
     MPI_Barrier(MPI_COMM_WORLD);
     printf("MPI Gather \n");
     MPI_Gather(weights->values, weights->length, MPI_DOUBLE, collectedWeights, weights->length, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    printf("Done Gather \n");
+    printf("[%d] Done Gather \n", rank);
     if (rank == 0) {
         printf("Combining weights\n");
-        for (i = 0; i < (weights->length*numtasks); i++) {
-            //printf("Weight: %f \n", collectedWeights[i]);
+        for (i = 0; i < (weights->length); i++) {
+            weights->values[i] = collectedWeights[i+(i*weights->length)];
         }
+        print_weights(weights);
     }
+    }
+    double end = MPI_Wtime();
+    double total_time = end-start;
+
+    printf("Took %f\n", total_time);
     if (rank == 0) {
         // Gather and test solution.
         printf("Testing quality of predictor\n");
-        //test(data, weights, solutions, number_of_features, number_of_entries);
+        test(data_1d, weights, solutions, number_of_features, number_of_entries);
     
         /*for (i = 0; i < number_of_entries; i++) {
             printf("Freeing %d\n",i);
