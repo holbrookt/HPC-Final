@@ -9,6 +9,8 @@
   * https://www.overleaf.com/12349783bydsxrtzjnhd#/46978373/
 3. Presentation showing equations in an easier to read way and simpler language
   * http://courses.cms.caltech.edu/cs179/2015_lectures/cs179_2015_lec16.pdf
+4. Final paper
+  * https://www.overleaf.com/12449432jgwnmjnhhdsg#/47398880/
 
 
 # Data Sources:
