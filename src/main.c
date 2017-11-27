@@ -1,4 +1,12 @@
 #include "main.h"
+#include <time.h>
+
+// Timing function
+double CLOCK() {
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC,  &t);
+    return (t.tv_sec * 1000)+(t.tv_nsec*1e-6);
+}
 
 // "Prediction" Function
 // Calculates the sigmoid of ( weight_0 (aka the bias) + sum(weight_i*element_i))
@@ -90,7 +98,7 @@ int main(int argc, char* argv[]) {
     int number_of_features = atoi(argv[3]);
     double **data = malloc( number_of_entries * sizeof(double *));
     double *solutions = malloc( number_of_entries * sizeof(double));
-    
+    double start, finish; //for timing
     // Setup Weights
     Weights_t weights = malloc(sizeof(Weights_t));
     weights->length = number_of_features+1;
@@ -103,12 +111,14 @@ int main(int argc, char* argv[]) {
     printf("Reading File\n");
     readfile(argv[1], data, solutions, number_of_features); 
     
+    start = CLOCK();
     printf("Running Logistic Regresion\n");
     logisticRegression(data, weights, solutions, number_of_entries);
-    
+    finish = CLOCK();
     printf("Testing quality of predictor\n");
     test(data, weights, solutions, number_of_features, number_of_entries);
-    
+    double total_time = finish - start;
+    printf("That took: %f ms\n", total_time);
     for (i = 0; i < number_of_entries; i++) {
         free(data[i]);
     }

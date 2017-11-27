@@ -1,13 +1,189 @@
-#include <stdlib.h>
-#include <math.h>
 #include <mpi.h>
 
 #include "main.h"
-#include "data.h"
 
 #define N_FETCH 1
 #define N_PUSH 1
 
+// "Prediction" Function
+// Calculates the sigmoid of ( weight_0 (aka the bias) + sum(weight_i*element_i))
+double predict( double * data, int start, Weights_t weights) {
+    double sol = weights->values[0];
+    int i;
+    for ( i = 1; i < weights->length; i++) {
+       sol += weights->values[i] * data[start+(i-1)];
+    }
+    return sigmoid(sol);
+}
+
+// Gradient Decent optimization of Logistic Regrssion.
+// The goal is to minimize the error between the predicted value and the real value.
+// 1. Where the p(x) = sigmoid(weight_0 (aka the bias) + sum(weight_i*element_i))
+// 2. The error is = Real - p(x)
+// 3. The gradient_i = learning_rate * error * p(x) * 1-p(x) * element_i
+// 4. The gradient_bias = learning_rate * error * p(x) * 1-p(x)
+void logisticRegression(double *data, Weights_t weights, double *solutions, int number_of_entries, int iter_cap, int task ) {
+    // Cutoff when the change in the weights is less than epsilon.
+    double epsilon = 0.000001;
+    // the learning rate
+    double gamma = 0.1;
+    // Limit the number of iterations.
+    int max_iters = iter_cap;
+    int iter = 0;
+    
+    Weights_t prev_weights = malloc(sizeof(Weights_t));
+    prev_weights->length = weights->length;
+    prev_weights->values = (double*)malloc(prev_weights->length* sizeof(double));
+    int i, j, k;
+    while (iter < max_iters) {
+        double error;
+        printf("number_of_entires: %d \n", number_of_entries);
+        for (j=0; j < number_of_entries; j++) {
+            // Get p(x) per item 1 ^
+            double sol = predict(data, j*prev_weights->length, prev_weights);
+            // Get error per item 2 ^
+            error = solutions[j] - sol;
+            //printf("[%d] predicted:  %f actual %f\n", task, sol, solutions[j]);
+            // Add bias gradient per item 4 ^
+            if (task == 0) {
+                weights->values[0] += gamma * error * sol * (1- sol);
+            } else {
+                weights->values[task] += (gamma * error * sol * (1 - sol) * data[j + i-1]);
+            }
+        }
+        print_weights(weights);
+        // normalize the ditance between the weights to see % change
+        double dist = normalize(weights, prev_weights);
+        //printf("Dist: %f\n", dist);
+        if ( dist < epsilon) {
+            break;
+        }
+        // Store current weights in seperate variable so that we can get % change
+        // in the next iteration
+        for (i = 0; i < weights->length; i++) {
+            prev_weights->values[i] = weights->values[i];
+            // printf("%.3f  ", weights[i]);
+        }
+        printf("Iteration %d: distance = %f\n", iter++, dist);
+        print_weights(weights);
+    }
+    free(prev_weights->values);
+    free(prev_weights);
+}
+
+// Test the quality of the predictor against training data
+// This should really be validated against a *diffrent* set of data
+int test(double * data, Weights_t weights, double *solutions, int number_of_features, int number_of_entries) {
+    int i, j;
+    int total = 0;
+    int correct = 0;
+    for (i = 0; i < number_of_entries; i++) {
+        // predict and compare rounded prediction against real value
+        double solution = predict(data, i*weights->length, weights);
+        if (round(solution) == solutions[i]) {
+            correct++;
+        }
+        total++;
+    }
+    printf("Percent correct = %d/%d\n", correct, total);
+    return 0;
+}
+
+void convert_2d_to_1d(double ** data_2d, double * data_1d, int rows, int cols) {
+    int i, j;
+    for (i = 0; i < rows; i++) {
+        for (j = 0; j < cols; j++) {
+            data_1d[ (i*cols) + j] = data_2d[i][j];
+        }
+    }
+}
+
+int main(int argc, char* argv[]) {
+    if (argc < 5) {
+        printf("Usage: ./LogisticRegression DataFile #_of_entries #_of_features batch_size\n");
+        exit(1);
+    }
+
+    int numtasks, rank, sendcount, recvcount, source;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &numtasks);
+
+    int number_of_entries = atoi(argv[2]);
+    int number_of_features = atoi(argv[3]);
+    int batch_size = atoi(argv[4]);
+    double **data = malloc( number_of_entries * sizeof(double *));
+    double *data_1d = malloc( number_of_entries * sizeof(double));
+    double *solutions = malloc( number_of_entries * sizeof(double));
+    // This will dump some numbers
+    // This would be ok if we were using randomized entries
+    // but since in the data is orginized its biasing away from a know value
+    // Oh well....
+    sendcount = (number_of_entries/numtasks) * number_of_features; 
+    double *recvbuf = malloc( sendcount * sizeof(double)); 
+    printf("Sending %d to %d children\n", numtasks, sendcount);    
+    // Setup Weights
+    Weights_t weights = malloc(sizeof(Weights_t));
+    weights->length = number_of_features+1;
+    weights->values = (double*)malloc((number_of_features+1)* sizeof(double));
+    double *collectedWeights = NULL;
+    int i =0;
+
+    if (rank == 0) {
+ 
+        for (i = 0; i < number_of_entries; i++) {
+            data[i] = malloc(number_of_features * sizeof(double));
+        }
+        printf("Reading File\n");
+        readfile(argv[1], data, solutions, number_of_features); 
+        convert_2d_to_1d(data, data_1d, number_of_entries, number_of_features);
+        //double *collectedWeights = malloc(numtasks*weights->length* sizeof(double)); 
+        double *collectedWeights = malloc(16* sizeof(double)); 
+    }
+ 
+    MPI_Barrier(MPI_COMM_WORLD);
+    double *localSolutions = malloc( (sendcount/3) * sizeof(double));
+    for (i = 0; i < (sendcount/3); i++) {
+        localSolutions[i] = solutions[i+(rank*(sendcount/3))];
+    }
+    MPI_Scatter(data_1d, sendcount, MPI_DOUBLE, recvbuf, sendcount, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    for ( i = 0; i < sendcount; i++) {
+        //printf("[%d] %d: %f\n", rank, i, recvbuf[i]);
+    }
+    printf("[%d] Got data: %f %f %f %f\n", rank, recvbuf[0], recvbuf[1], recvbuf[2], recvbuf[3]);
+    printf("[%d] Running Logistic Regresion\n", rank);
+    logisticRegression(recvbuf, weights, localSolutions, sendcount/3, batch_size, rank);
+    MPI_Barrier(MPI_COMM_WORLD);
+    printf("MPI Gather \n");
+    MPI_Gather(weights->values, weights->length, MPI_DOUBLE, collectedWeights, weights->length, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    printf("Done Gather \n");
+    if (rank == 0) {
+        printf("Combining weights\n");
+        for (i = 0; i < (weights->length*numtasks); i++) {
+            //printf("Weight: %f \n", collectedWeights[i]);
+        }
+    }
+    if (rank == 0) {
+        // Gather and test solution.
+        printf("Testing quality of predictor\n");
+        //test(data, weights, solutions, number_of_features, number_of_entries);
+    
+        /*for (i = 0; i < number_of_entries; i++) {
+            printf("Freeing %d\n",i);
+            free(data[i]);
+        }
+    
+        free(data);
+        free(solutions);
+        free(weights->values);
+        free(weights); */
+    }
+    MPI_Finalize();
+
+    return 0;
+}
+
+/*
 double learn_rate;
 
 double estimate(double *coef, double *data, int n_terms) {
@@ -96,123 +272,4 @@ void send_data_shards(double **data, int data_per_proc,
                   len, MPI_DOUBLE, dest_proc, 0, MPI_COMM_WORLD);
     }
 }
-#include "main.h"
-
-// "Prediction" Function
-// Calculates the sigmoid of ( weight_0 (aka the bias) + sum(weight_i*element_i))
-double predict( double * row, Weights_t weights) {
-    double sol = weights->values[0];
-    int i;
-    for ( i = 1; i < weights->length; i++) {
-       sol += weights->values[i] * row[i-1];
-    }
-    return sigmoid(sol);
-}
-
-// Gradient Decent optimization of Logistic Regrssion.
-// The goal is to minimize the error between the predicted value and the real value.
-// 1. Where the p(x) = sigmoid(weight_0 (aka the bias) + sum(weight_i*element_i))
-// 2. The error is = Real - p(x)
-// 3. The gradient_i = learning_rate * error * p(x) * 1-p(x) * element_i
-// 4. The gradient_bias = learning_rate * error * p(x) * 1-p(x)
-void logisticRegression(double **data, Weights_t weights, double *solutions, int number_of_entries) {
-    // Cutoff when the change in the weights is less than epsilon.
-    double epsilon = 0.000001;
-    // the learning rate
-    double gamma = 0.1;
-    // Limit the number of iterations.
-    int max_iters = 10000;
-    int iter = 0;
-    
-    Weights_t prev_weights = malloc(sizeof(Weights_t));
-    prev_weights->length = weights->length;
-    prev_weights->values = (double*)malloc(prev_weights->length* sizeof(double));
-    int i, j, k;
-    while (iter < max_iters) {
-        double error;
-        for (j=0; j < number_of_entries; j++) {
-            // Get p(x) per item 1 ^
-            double sol = predict(data[j], prev_weights);
-            // Get error per item 2 ^
-            error = solutions[j] - sol;
-            // Add bias gradient per item 4 ^
-            weights->values[0] += gamma * error * sol * (1- sol);
-            // Add gradient to eache element per item 3 ^
-            for (i=1; i < weights->length; i++) {
-                weights->values[i] += (gamma * error * sol * (1 - sol) * data[j][i-1]);
-            }
-        }
-        print_weights(weights);
-        // normalize the ditance between the weights to see % change
-        double dist = normalize(weights, prev_weights);
-        if ( dist < epsilon) {
-            break;
-        }
-        // Store current weights in seperate variable so that we can get % change
-        // in the next iteration
-        for (i = 0; i < weights->length; i++) {
-            prev_weights->values[i] = weights->values[i];
-            // printf("%.3f  ", weights[i]);
-        }
-        printf("Iteration %d: distance = %f\n", iter++, dist);
-        print_weights(weights);
-    }
-    free(prev_weights->values);
-    free(prev_weights);
-}
-
-// Test the quality of the predictor against training data
-// This should really be validated against a *diffrent* set of data
-int test(double ** data, Weights_t weights, double *solutions, int number_of_features, int number_of_entries) {
-    int i, j;
-    int total = 0;
-    int correct = 0;
-    for (i = 0; i < number_of_entries; i++) {
-        // predict and compare rounded prediction against real value
-        double solution = predict(data[i], weights);
-        if (round(solution) == solutions[i]) {
-            correct++;
-        }
-        total++;
-    }
-    printf("Percent correct = %d/%d\n", correct, total);
-    return 0;
-}
-
-int main(int argc, char* argv[]) {
-    if (argc < 4) {
-        printf("Usage: ./LogisticRegression DataFile #_of_entries #_of_features\n");
-        exit(1);
-    }
-    int number_of_entries = atoi(argv[2]);
-    int number_of_features = atoi(argv[3]);
-    double **data = malloc( number_of_entries * sizeof(double *));
-    double *solutions = malloc( number_of_entries * sizeof(double));
-    
-    // Setup Weights
-    Weights_t weights = malloc(sizeof(Weights_t));
-    weights->length = number_of_features+1;
-    weights->values = (double*)malloc((number_of_features+1)* sizeof(double));
-    
-    int i =0;
-    for (i = 0; i < number_of_entries; i++) {
-        data[i] = malloc(number_of_features * sizeof(double));
-    }
-    printf("Reading File\n");
-    readfile(argv[1], data, solutions, number_of_features); 
-    
-    printf("Running Logistic Regresion\n");
-    logisticRegression(data, weights, solutions, number_of_entries);
-    
-    printf("Testing quality of predictor\n");
-    test(data, weights, solutions, number_of_features, number_of_entries);
-    
-    for (i = 0; i < number_of_entries; i++) {
-        free(data[i]);
-    }
-    free(data);
-    free(solutions);
-    free(weights->values);
-    free(weights);
-    return 0;
-}
+*/
