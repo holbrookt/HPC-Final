@@ -35,49 +35,46 @@ void logisticRegression(double *data, Weights_t weights, double *solutions, int 
     prev_weights->length = weights->length;
     prev_weights->values = (double*)malloc(prev_weights->length* sizeof(double));
     int i, j, k;
+    
+    for (i=0; i<prev_weights->length; i++) {
+        prev_weights->values[i] = weights->values[i];
+    }
+    
     while (iter < max_iters) {
         double error;
         printf("[%d] number_of_entires: %d \n", task, number_of_entries);
         for (j=0; j < number_of_entries; j++) {
-            if (task != 0) {
-                printf("[%d] In loop\n", task);
-            }
             //printf("[%d] sol: %f\n", task, solutions[j]);
             // Get p(x) per item 1 ^
             double sol = predict(data, j*prev_weights->length, prev_weights);
             if (task != 0) {
-                printf("[%d] predicted: %f \n", task, sol);
-                printf("[%d] solution: %f \n", task, solutions[j]);
-                printf("[%d] Will try to index into data: %d\n", task, ((j*weights->length)+task-1));
-                printf("[%d] data at index: %f\n", task, data[(j*weights->length)+task-1]);
+               // printf("[%d D%d] predicted: %f \n", task , j, sol);
+               // printf("[%d D%d] slution: %f \n", task, j, solutions[j]);
+               // printf("[%d D%d] Will try to index into data: %d\n", task, j, ((j*weights->length)+task-1));
+               // printf("[%d D%d] data at index: %f\n", task, j, data[(j*weights->length)+task-1]);
             } 
             // Get error per item 2 ^
             error = solutions[j] - sol;
-            if (j == 10) {
-                printf("[%d D%d] sol: %f -- index: %d -- %d: %f\n", task, j, solutions[j], task, (j*weights->length)+task-1 , data[(j*weights->length)+task-1]);
-            }
+            //printf("[%d D%d] sol: %f -- index: %d -- %d: %f\n", task, j, solutions[j], task, (j*weights->length)+task-1 , data[(j*weights->length)+task-1]);
            
             //printf("[%d] predicted:  %f actual %f\n", task, sol, solutions[j]);
             // Add bias gradient per item 4 ^
             if (task !=0) {
                 int k;
-                for (k=0; k < weights->length; k++) {
-                    printf("%f \n", weights->values[k]);
-                }
-                printf("[%d] Updating weights\n", task);
+                //printf("[%d] Updating weights\n", task);
             }
             if (task == 0) {
                 weights->values[0] += gamma * error * sol * (1- sol);
             } else {
-                weights->values[task] += (gamma * error * sol * (1 - sol) * data[(j*weights->length) + task-1]);
+                weights->values[task] += (gamma * error * sol * (1 - sol) * data[(j*(weights->length-1)) + task-1]);
             }
             if (task !=0) {
-                printf("[%d] DONE Updating weights\n", task);
+               // printf("[%d] DONE Updating weights\n", task);
             }
 
         }
         if (task !=0) {
-            printf("[%d] DONE running loop weights\n", task);
+            //printf("[%d] DONE running loop weights\n", task);
         }
         
         print_weights_ranked(weights, task);
@@ -125,10 +122,10 @@ void convert_2d_to_1d(double ** data_2d, double * data_1d, int rows, int cols) {
     int i, j;
     for (i = 0; i < rows; i++) {
         for (j = 0; j < cols; j++) {
-            //printf("%f ", data_2d[i][j]);
+            // printf("%d: %f ", (i*cols)+j, data_2d[i][j]);
             data_1d[ (i*cols) + j] = data_2d[i][j];
         }
-        //printf("\n");
+        // printf("\n");
     }
 }
 
@@ -149,7 +146,7 @@ int main(int argc, char* argv[]) {
     double **data = malloc( number_of_entries * sizeof(double *));
     double *data_1d = malloc( number_of_entries * number_of_features * sizeof(double));
     double *solutions = malloc( number_of_entries * sizeof(double));
-    double *recvbuf = malloc((number_of_features+1)*sizeof(double));
+    double *recvbuf = (double*)malloc((number_of_features+1)*sizeof(double));
     // This will dump some numbers
     // This would be ok if we were using randomized entries
     // but since in the data is orginized its biasing away from a know value
@@ -164,7 +161,6 @@ int main(int argc, char* argv[]) {
     double *collectedWeights = NULL;
     
     int i =0;
-    if (rank == 0) {
         
         for (i = 0; i < number_of_entries; i++) {
             data[i] = malloc(number_of_features * sizeof(double));
@@ -174,6 +170,7 @@ int main(int argc, char* argv[]) {
         convert_2d_to_1d(data, data_1d, number_of_entries, number_of_features);
         collectedWeights = malloc(numtasks*weights->length* sizeof(double)); 
         printf("Data 1: %f %f %f\n", data_1d[3], data_1d[4], data_1d[5]);
+    if (rank == 0) {
         
         for (i = 0; i < weights->length; i++) {
             weights->values[i] = 0;
@@ -184,25 +181,16 @@ int main(int argc, char* argv[]) {
 
     double start = MPI_Wtime();
     int j;
+    /*MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Bcast(data_1d, number_of_entries*number_of_features, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     MPI_Barrier(MPI_COMM_WORLD);
-    MPI_Bcast(data_1d, number_of_entries, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    MPI_Barrier(MPI_COMM_WORLD);
-    MPI_Bcast(solutions, number_of_entries * number_of_features, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    MPI_Barrier(MPI_COMM_WORLD);
-    for (j = 0; j <50/batch_size; j++) {
-        printf("First Batch\n");
-        MPI_Bcast(recvbuf, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast(solutions, number_of_entries, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_WORLD);*/
+    for (j = 0; j <10000/batch_size; j++) {
+        MPI_Bcast(weights->values, weights->length, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         MPI_Barrier(MPI_COMM_WORLD);
+        printf("[%d] Done\n", rank);
         int k;
-        for (k=0; k < weights->length; k++) {
-            weights->values[k] = recvbuf[k];
-            printf("[%d] %d: %f \n", rank, k, weights->values[k]);
-        }
-        
-        for (k=0; k < weights->length; k++) {
-            printf("[%d] %d: %f \n", rank, k, weights->values[k]);
-        }
-        
         
         printf("[%d] Running Logistic Regresion\n", rank);
         logisticRegression(data_1d, weights, solutions, number_of_entries, batch_size, rank); 
@@ -214,7 +202,7 @@ int main(int argc, char* argv[]) {
             printf("Combining weights\n");
             for (i = 0; i < (weights->length); i++) {
                 weights->values[i] = collectedWeights[i+(i*weights->length)];
-                recvbuf[i] = weights->values[i];
+                //recvbuf[i] = weights->values[i];
             }
             print_weights(weights);
         }
