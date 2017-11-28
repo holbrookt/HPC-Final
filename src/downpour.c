@@ -46,7 +46,7 @@ void logisticRegression(double *data, Weights_t weights, double *solutions, int 
         for (j=0; j < number_of_entries; j++) {
             //printf("[%d] sol: %f\n", task, solutions[j]);
             // Get p(x) per item 1 ^
-            double sol = predict(data, j*prev_weights->length, prev_weights);
+            double sol = predict(data, j*(prev_weights->length-1), prev_weights);
             if (task != 0) {
                // printf("[%d D%d] predicted: %f \n", task , j, sol);
                // printf("[%d D%d] slution: %f \n", task, j, solutions[j]);
