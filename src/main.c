@@ -41,6 +41,13 @@ void logisticRegression(double **data, Weights_t weights, double *solutions, int
     while (iter < max_iters) {
         double error;
         for (j=0; j < number_of_entries; j++) {
+            if (DEBUG == 1 && j == EXAMPLE) {
+                printf("Sol: %f -- Data %d: ", solutions[j], EXAMPLE);
+                for (i = 1; i < weights->length; i++){
+                    printf("%f   ",data[j][i-1]);
+                }
+                printf("\n");
+            }
             // Get p(x) per item 1 ^
             double sol = predict(data[j], prev_weights);
             // Get error per item 2 ^
