@@ -104,7 +104,8 @@ int test(double * data, Weights_t weights, double *solutions, int number_of_feat
     int correct = 0;
     for (i = 0; i < number_of_entries; i++) {
         // predict and compare rounded prediction against real value
-        double solution = predict(data, i*weights->length, weights);
+        double solution = predict(data, i*(weights->length-1), weights);
+        printf("Predicted %f, actual: %f\n", solution, solutions[i]);
         if (round(solution) == solutions[i]) {
             correct++;
         }
@@ -186,7 +187,7 @@ int main(int argc, char* argv[]) {
     MPI_Barrier(MPI_COMM_WORLD);
     MPI_Bcast(solutions, number_of_entries, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     MPI_Barrier(MPI_COMM_WORLD);*/
-    for (j = 0; j <10000/batch_size; j++) {
+    for (j = 0; j <=10000/batch_size; j++) {
         MPI_Bcast(weights->values, weights->length, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         MPI_Barrier(MPI_COMM_WORLD);
         printf("[%d] Done\n", rank);
