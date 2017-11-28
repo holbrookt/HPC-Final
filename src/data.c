@@ -9,10 +9,12 @@
 void readfile(char* filename, double ** data, double *solutions, int number_of_features) {
     FILE* fp = fopen(filename, "r");
     //char*
-    char line[150];
+    char line[1200];
     int example_number = 0;
+    printf("also should fail? %f\n", data[9999][0]);
     while(fgets(line, sizeof(line), fp)){
-        char ** line_tokens = malloc((number_of_features+1)*sizeof(char*));
+        //printf("%s", line);
+        char ** line_tokens = malloc((number_of_features+1)*2*sizeof(char*));
         int i = 0;
 
         // Clear out any newline chars from the end of the file
@@ -33,10 +35,15 @@ void readfile(char* filename, double ** data, double *solutions, int number_of_f
         // We could have been missing data in the middle
         i = 1;
         while (line_tokens[i] != NULL) {
+            //printf("line_token: %s  -- ", line_tokens[i]);
             // Grab the reported index
             int index = atoi(strtok(line_tokens[i], ":"));
+            //printf(" got index %d\n", index);
+            char * value = strtok(NULL,":");
+            double float_value = atof(value);
             // set the target index to the reported value
-            data[example_number][index-1] = atof(strtok(NULL, ":"));
+            //printf("data == %f\n", data[example_number]);
+            data[example_number][index-1] = float_value;//atof(strtok(NULL, ":"));
             i++;
         }
 
@@ -49,9 +56,11 @@ void readfile(char* filename, double ** data, double *solutions, int number_of_f
             }
             printf("   Solution: %f\n", solutions[example_number]);
         }
+        //printf("example: %d\n", example_number);
         example_number++;
         free(line_tokens);
     }
+    printf("Closing file\n");
     fclose(fp);
     printf("number_of_entries: %d\n", example_number);
 }

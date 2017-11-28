@@ -16,7 +16,7 @@
 # Data Sources:
 
 1. heart_scale:
-  * https://github.com/liyanghua/logistic-regression-in-c--/blob/master/heart_scale
+  * http://archive.ics.uci.edu/ml/datasets/Statlog+%28Heart%29
 2. cuse.raw:
   * http://data.princeton.edu/wws509/datasets/#cuse2
 

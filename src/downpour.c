@@ -26,7 +26,7 @@ void logisticRegression(double *data, Weights_t weights, double *solutions, int 
     // Cutoff when the change in the weights is less than epsilon.
     double epsilon = 0.000001;
     // the learning rate
-    double gamma = 0.1;
+    double gamma = 0.001;
     // Limit the number of iterations.
     int max_iters = iter_cap;
     int iter = 0;
@@ -105,7 +105,7 @@ int test(double * data, Weights_t weights, double *solutions, int number_of_feat
     for (i = 0; i < number_of_entries; i++) {
         // predict and compare rounded prediction against real value
         double solution = predict(data, i*(weights->length-1), weights);
-        printf("Predicted %f, actual: %f\n", solution, solutions[i]);
+        //printf("Predicted %f, actual: %f\n", solution, solutions[i]);
         if (round(solution) == solutions[i]) {
             correct++;
         }

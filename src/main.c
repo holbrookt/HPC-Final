@@ -113,8 +113,13 @@ int main(int argc, char* argv[]) {
     
     int i =0;
     for (i = 0; i < number_of_entries; i++) {
+        printf("Malloc-ing %d\n", i);
         data[i] = malloc(number_of_features * sizeof(double));
+        if(data[i] == NULL) {
+            printf("why though");
+        }
     }
+    printf("This should fail: %f\n", data[9999][0]);
     printf("Reading File\n");
     readfile(argv[1], data, solutions, number_of_features); 
     
